@@ -35,7 +35,7 @@ class AmqpWebhookHandler : WebhookHandler {
     override fun initHandler() = Shared.initOnce()
 
     override fun close() {
-        Shared.shutdown()
+        // Intentionally no-op; the shared connection is managed by the factory's lifecycle.
     }
 
     override fun sendWebhook(request: WebhookPayload) {
@@ -137,6 +137,7 @@ class AmqpWebhookHandler : WebhookHandler {
                     }
 
                     startPublisherThread()
+                    Runtime.getRuntime().addShutdownHook(Thread { shutdown() })
                     initialized.set(true)
 
                     logger.info(
