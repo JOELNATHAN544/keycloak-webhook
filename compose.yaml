@@ -93,6 +93,9 @@ services:
     <<: *keycloak-common-extra
 
   keycloak-26:
+    depends_on:
+      rabbitmq1:
+        condition: service_healthy
     image: quay.io/keycloak/keycloak:26.4.0
     ports: ["9026:9026"]
     environment:
