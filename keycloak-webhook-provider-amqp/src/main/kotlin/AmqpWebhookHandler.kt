@@ -35,7 +35,7 @@ class AmqpWebhookHandler : WebhookHandler {
     override fun initHandler() = Shared.initOnce()
 
     override fun close() {
-        // Intentionally no-op; wire Shared.shutdown() from your factory/lifecycle if needed.
+        Shared.shutdown()
     }
 
     override fun sendWebhook(request: WebhookPayload) {
@@ -54,8 +54,6 @@ class AmqpWebhookHandler : WebhookHandler {
     companion object {
         const val PROVIDER_ID = "webhook-amqp"
 
-        private val BACKOFF_INITIAL = 250L
-        private val BACKOFF_MAX = 2_000L
         private const val THROTTLE_PARK_NS = 250_000L   // ~0.25ms
         private const val ON_ERROR_PARK_NS = 200_000L   // ~0.2ms
 
@@ -202,13 +200,13 @@ class AmqpWebhookHandler : WebhookHandler {
              * Uses async confirms with a bounded in-flight window and a confirm-timeout watchdog.
              */
             private fun publisherLoop() {
-                var backoff = BACKOFF_INITIAL
+                var backoff = config!!.backoffInitialMs
                 var lastWatchdogCheck = 0L
 
                 while (!stopping.get()) {
                     try {
                         ensureConnected()
-                        backoff = BACKOFF_INITIAL
+                        backoff = config!!.backoffInitialMs
 
                         // Throttle on in-flight window (micro-park to avoid hot spin)
                         while (inFlight.size >= inFlightCap && !stopping.get()) {
@@ -255,7 +253,7 @@ class AmqpWebhookHandler : WebhookHandler {
                     } catch (t: Throwable) {
                         logger.warn("AMQP publisher loop fault: {}. Backing off {} ms", t.message, backoff, t)
                         sleepQuiet(backoff)
-                        backoff = min(backoff * 2, BACKOFF_MAX)
+                        backoff = min(backoff * 2, config!!.backoffMaxMs)
                     }
                 }
                 logger.info("AMQP publisher thread stopping. queueSize={} inFlight={}", queue.size, inFlight.size)
@@ -379,21 +377,18 @@ class AmqpWebhookHandler : WebhookHandler {
 
             private fun ensureExchange(name: String) {
                 val ch = channel ?: error("Channel not open")
-
-                val passive = runCatching { ch.exchangeDeclarePassive(name) }
-                if (passive.isSuccess) {
-                    logger.info("Verified exchange '{}' exists", name)
-                } else {
-                    logger.warn("Exchange '{}' not found (passive): {}. Attempting declare.", name, passive.exceptionOrNull()?.message)
-                    val declared = runCatching { ch.exchangeDeclare(name, "topic", true, false, null) }
-                    if (declared.isSuccess) {
-                        logger.info("Declared exchange '{}' (durable topic).", name)
-                    } else {
-                        logger.error(
-                            "Failed to declare exchange '{}'. Publishing may fail. Reason: {}",
-                            name, declared.exceptionOrNull()?.message, declared.exceptionOrNull()
-                        )
-                    }
+                try {
+                    // This single, idempotent call creates the exchange if it's missing
+                    // or does nothing if it already exists. It prevents the channel-closing error.
+                    ch.exchangeDeclare(name, "topic", true, false, null)
+                    logger.info("Ensured exchange '{}' exists (durable topic).", name)
+                } catch (e: Exception) {
+                    logger.error(
+                        "Failed to declare exchange '{}'. Publishing may fail. Reason: {}",
+                        name, e.message, e
+                    )
+                    // If this fails, the channel is untrustworthy. Close it to force a full repair.
+                    runCatching { ch.close() }
                 }
             }
 
