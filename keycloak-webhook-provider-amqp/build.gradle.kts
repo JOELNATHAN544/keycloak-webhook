@@ -21,7 +21,7 @@ dependencies {
     
     implementation("com.google.code.gson", "gson", "2.12.1")
     implementation("com.rabbitmq", "amqp-client", "5.25.0")
-    implementation("org.slf4j", "slf4j-log4j12", "2.0.17")
+    compileOnly("org.slf4j", "slf4j-log4j12", "2.0.17")
 }
 
 tasks.test {
@@ -34,4 +34,9 @@ kotlin {
 tasks.withType<ShadowJar> {
     archiveClassifier.set("all")
     mergeServiceFiles()
+
+    // Exclude SLF4J dependencies to prevent conflicts with the Keycloak runtime
+    dependencies {
+        exclude(dependency("org.slf4j:.*"))
+    }
 }
