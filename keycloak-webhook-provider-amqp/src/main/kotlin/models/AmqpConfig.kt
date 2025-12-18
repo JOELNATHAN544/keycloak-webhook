@@ -15,7 +15,11 @@ data class AmqpConfig(
     val inFlightCapacity: Int,
     val confirmTimeoutMs: Long,
     val backoffInitialMs: Long,
-    val backoffMaxMs: Long
+    val backoffMaxMs: Long,
+    val dlqEnabled: Boolean,
+    val mainQueueName: String,
+    val dlqExchangeName: String,
+    val dlqQueueName: String
 ) {
     companion object {
         private const val DEFAULT_PORT = 5672
@@ -27,6 +31,10 @@ data class AmqpConfig(
         private const val DEFAULT_CONFIRM_TIMEOUT_MS = 15_000L
         private const val DEFAULT_BACKOFF_INITIAL_MS = 250L
         private const val DEFAULT_BACKOFF_MAX_MS = 2000L
+        private const val DEFAULT_DLQ_ENABLED = false
+        private const val DEFAULT_MAIN_QUEUE_NAME = "keycloak.events"
+        private const val DEFAULT_DLQ_EXCHANGE_NAME = "keycloak.dlx"
+        private const val DEFAULT_DLQ_QUEUE_NAME = "keycloak.dlq"
 
         fun fromEnv(): AmqpConfig {
             val username = amqpUsernameKey.cff()
@@ -80,7 +88,11 @@ data class AmqpConfig(
                 inFlightCapacity = inFlightCapacity,
                 confirmTimeoutMs = confirmTimeoutMs,
                 backoffInitialMs = backoffInitialMs,
-                backoffMaxMs = backoffMaxMs
+                backoffMaxMs = backoffMaxMs,
+                dlqEnabled = amqpDlqEnabledKey.cfe { DEFAULT_DLQ_ENABLED.toString() }.toBoolean(),
+                mainQueueName = amqpMainQueueKey.cfe { DEFAULT_MAIN_QUEUE_NAME },
+                dlqExchangeName = amqpDlqExchangeKey.cfe { DEFAULT_DLQ_EXCHANGE_NAME },
+                dlqQueueName = amqpDlqQueueKey.cfe { DEFAULT_DLQ_QUEUE_NAME }
             )
         }
     }
