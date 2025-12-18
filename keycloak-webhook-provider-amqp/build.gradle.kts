@@ -17,7 +17,7 @@ dependencies {
 
     implementation(project(":keycloak-webhook-provider-core"))
 
-    implementation("org.keycloak", "keycloak-services", "26.4.0")
+    compileOnly("org.keycloak", "keycloak-services", "26.4.0")
     
     implementation("com.google.code.gson", "gson", "2.12.1")
     implementation("com.rabbitmq", "amqp-client", "5.25.0")
@@ -31,11 +31,7 @@ kotlin {
     jvmToolchain(17)
 }
 
-tasks {
-    val shadowJar by existing(ShadowJar::class) {
-        dependencies {
-            include(dependency("com.rabbitmq:amqp-client"))
-        }
-        dependsOn(build)
-    }
+tasks.withType<ShadowJar> {
+    archiveClassifier.set("all")
+    mergeServiceFiles()
 }
