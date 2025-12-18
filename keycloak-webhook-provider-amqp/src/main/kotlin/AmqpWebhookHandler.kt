@@ -276,7 +276,7 @@ class AmqpWebhookHandler : WebhookHandler {
                 channel!!.confirmSelect()
                 installConfirmListener(channel!!)
 
-                ensureExchange(exchange!!)
+                ensureTopology()
 
                 logger.info(
                     "AMQP connected: hosts={} vhost={} heartbeat={}s autoRecovery={} topologyRecovery={}",
@@ -366,7 +366,7 @@ class AmqpWebhookHandler : WebhookHandler {
                         it.confirmSelect()
                         installConfirmListener(it)
                         // ensure exchange again on rebuilt channel
-                        ensureExchange(exchange!!)
+                        ensureTopology()
                     }
                     return
                 }
@@ -374,23 +374,6 @@ class AmqpWebhookHandler : WebhookHandler {
                 runCatching { connection?.close() }
                 requeueAllInFlight()
                 ensureConnected()
-            }
-
-            private fun ensureExchange(name: String) {
-                val ch = channel ?: error("Channel not open")
-                try {
-                    // This single, idempotent call creates the exchange if it's missing
-                    // or does nothing if it already exists. It prevents the channel-closing error.
-                    ch.exchangeDeclare(name, "topic", true, false, null)
-                    logger.info("Ensured exchange '{}' exists (durable topic).", name)
-                } catch (e: Exception) {
-                    logger.error(
-                        "Failed to declare exchange '{}'. Publishing may fail. Reason: {}",
-                        name, e.message, e
-                    )
-                    // If this fails, the channel is untrustworthy. Close it to force a full repair.
-                    runCatching { ch.close() }
-                }
             }
 
             private fun wireConnectionListeners(connection: Connection, factory: ConnectionFactory) {
@@ -415,6 +398,49 @@ class AmqpWebhookHandler : WebhookHandler {
 
             private fun sleepQuiet(ms: Long) {
                 try { Thread.sleep(ms) } catch (_: InterruptedException) {}
+            }
+
+            private fun ensureTopology() {
+                val ch = channel ?: error("Channel not open")
+                val cfg = config ?: error("Config not loaded")
+        
+                try {
+                    // Always declare the main exchange
+                    ch.exchangeDeclare(cfg.exchange, "topic", true, false, null)
+                    logger.info("Ensured main exchange '{}' exists (durable topic).", cfg.exchange)
+        
+                    if (cfg.dlqEnabled) {
+                        // 1. Declare the Dead-Letter Exchange (DLX)
+                        ch.exchangeDeclare(cfg.dlqExchangeName, "fanout", true, false, null)
+                        logger.info("Ensured DLQ exchange '{}' exists (durable fanout).", cfg.dlqExchangeName)
+        
+                        // 2. Declare the Dead-Letter Queue (DLQ)
+                        ch.queueDeclare(cfg.dlqQueueName, true, false, false, null)
+                        logger.info("Ensured DLQ queue '{}' exists (durable).", cfg.dlqQueueName)
+        
+                        // 3. Bind the DLQ to the DLX
+                        ch.queueBind(cfg.dlqQueueName, cfg.dlqExchangeName, "") // No routing key needed for fanout
+                        logger.info("Bound DLQ queue '{}' to DLX '{}'.", cfg.dlqQueueName, cfg.dlqExchangeName)
+        
+                        // 4. Declare the main queue with DLQ arguments
+                        val args = mapOf(
+                            "x-dead-letter-exchange" to cfg.dlqExchangeName
+                        )
+                        ch.queueDeclare(cfg.mainQueueName, true, false, false, args)
+                        logger.info("Ensured main queue '{}' exists with DLX '{}'.", cfg.mainQueueName, cfg.dlqExchangeName)
+        
+                        // 5. Bind the main queue to the main exchange
+                        ch.queueBind(cfg.mainQueueName, cfg.exchange, "#") // Bind all messages
+                        logger.info("Bound main queue '{}' to main exchange '{}'.", cfg.mainQueueName, cfg.exchange)
+                    }
+                } catch (e: Exception) {
+                    logger.error(
+                        "Failed to declare AMQP topology. Publishing may fail. Reason: {}",
+                        e.message, e
+                    )
+                    // If topology declaration fails, the channel is untrustworthy.
+                    runCatching { ch.close() }
+                }
             }
 
             private fun resetMetricsAfterFlush() {
