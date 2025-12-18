@@ -50,6 +50,10 @@ abstract class AbstractWebhookEventListenerFactory(
 
     override fun postInit(factory: KeycloakSessionFactory) {}
 
+    override fun close() {
+        delegate.close()
+    }
+
     override fun onEvent(event: Event) = send(
         event.id,
         event.time,
