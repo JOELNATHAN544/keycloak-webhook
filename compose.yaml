@@ -39,11 +39,16 @@ x-keycloak-common-extra: &keycloak-common-extra
     - -c
     - |
       set -ex
-      cp /tmp/libs-amqp/*-all.jar /opt/keycloak/providers
+      # Copy our provider and its dependencies
+      cp /tmp/libs-core/*.jar /opt/keycloak/providers/
+      cp /tmp/libs-amqp/*.jar /opt/keycloak/providers/
+      cp /tmp/provider-deps/*.jar /opt/keycloak/providers/
       /opt/keycloak/bin/kc.sh start-dev --import-realm # Start Keycloak in dev mode and import the realm
   volumes:
     - ./.docker/keycloak-config/:/opt/keycloak/data/import/:ro
+    - ./keycloak-webhook-provider-core/build/libs:/tmp/libs-core:ro
     - ./keycloak-webhook-provider-amqp/build/libs:/tmp/libs-amqp:ro
+    - ./.docker/keycloak-deps:/tmp/provider-deps:ro
   links:
     - prism
     - syslog-ng
