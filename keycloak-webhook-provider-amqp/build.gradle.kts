@@ -1,8 +1,6 @@
-import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 
 plugins {
     kotlin("jvm")
-    id("com.github.johnrengelman.shadow") version "8.1.1"
 }
 
 group = "com.vymalo.keycloak.webhook"
@@ -19,8 +17,8 @@ dependencies {
 
     compileOnly("org.keycloak", "keycloak-services", "26.4.0")
     
-    implementation("com.google.code.gson", "gson", "2.12.1")
-    implementation("com.rabbitmq", "amqp-client", "5.25.0")
+    compileOnly("com.google.code.gson", "gson", "2.12.1")
+    compileOnly("com.rabbitmq", "amqp-client", "5.21.0")
     compileOnly("org.slf4j", "slf4j-log4j12", "2.0.17")
 }
 
@@ -29,14 +27,4 @@ tasks.test {
 }
 kotlin {
     jvmToolchain(17)
-}
-
-tasks.withType<ShadowJar> {
-    archiveClassifier.set("all")
-    mergeServiceFiles()
-
-    // Exclude SLF4J dependencies to prevent conflicts with the Keycloak runtime
-    dependencies {
-        exclude(dependency("org.slf4j:.*"))
-    }
 }
