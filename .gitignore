@@ -2,6 +2,7 @@
 build/
 *.class
 *.log
+*.jar
 .docker/syslog/log
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
