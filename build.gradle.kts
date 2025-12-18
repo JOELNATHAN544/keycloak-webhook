@@ -14,7 +14,7 @@ subprojects {
     apply(plugin = "org.jetbrains.kotlin.jvm")
 
     dependencies {
-        implementation(kotlin("stdlib"))
+        compileOnly(kotlin("stdlib"))
     }
 }
 
